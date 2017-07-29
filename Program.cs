@@ -7,26 +7,29 @@ using Fuse.Scripting.V8.Simple;
 
 namespace Fuse.Babel
 {
-    class Program
+    public class Transpiler
     {
-        static void Main(string[] args)
+        JSContext _context;
+        AutoReleasePool _pool;
+        JSFunction _transform;
+
+        public Transpiler()
         {
-            var context = Fuse.Scripting.V8.Simple.Context.Create(Handle.Free, Handle.Free);
+            _context = Fuse.Scripting.V8.Simple.Context.Create(Handle.Free, Handle.Free);
             var babelsrc = new System.IO.StreamReader(System.Reflection.Assembly.GetExecutingAssembly().GetManifestResourceStream("Fuse.Babel.babel.min.js")).ReadToEnd();
-            var pool = new AutoReleasePool();
-            Action<JSScriptException> errorHandler = (JSScriptException e) =>
-            {
-                Console.WriteLine("ERROR");
-            };
-            context.Evaluate("(babel)", babelsrc, pool, errorHandler);
+            _pool = new AutoReleasePool();
+            _context.Evaluate("(babel)", babelsrc, _pool, OnError);
+            _transform = _context.Evaluate("(babel)", "(function(code) { return Babel.transform(code, { presets: ['es2015'] }).code })", _pool, OnError).AsFunction();
+        }
 
-            var evalFunc = context.Evaluate("(babel)", "(function(code) { return Babel.transform(code, { presets: ['es2015'] }).code })", pool, errorHandler).AsFunction();
+        void OnError(JSScriptException e)
+        {
+            Console.WriteLine("ERROR");
+        }
 
-            var code = "import foo from 'bar'";
-
-            var res = evalFunc.Call(context, V8SimpleExtensions.Null().AsObject(), new JSValue[] { V8SimpleExtensions.NewString(context, code, pool).AsValue() }, pool, errorHandler).AsString().ToStr(context);
-
-            Console.WriteLine(res);
+        public string Transpile(string code)
+        {
+            return _transform.Call(_context, V8SimpleExtensions.Null().AsObject(), new JSValue[] { V8SimpleExtensions.NewString(_context, code, _pool).AsValue() }, _pool, OnError).AsString().ToStr(_context);
         }
     }
 }
